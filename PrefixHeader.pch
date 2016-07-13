@@ -1,0 +1,46 @@
+//
+//  PrefixHeader.pch
+//  PPS
+//
+//  Created by Najmul Hasan on 1/5/15.
+//  Copyright (c) 2015 Instalogic. All rights reserved.
+//
+
+#ifndef PPS_PrefixHeader_pch
+#define PPS_PrefixHeader_pch
+
+// Include any system framework and library headers here that should be included in all compilation units.
+// You will also need to set the Prefix Header build setting of one or more of your targets to reference this file.
+
+#ifdef __OBJC__
+
+#import <UIKit/UIKit.h>
+#import <Foundation/Foundation.h>
+#import <QuartzCore/QuartzCore.h>
+#import "DataModel.h"
+#import "SVProgressHUD.h"
+#import "UIView+Custom.h"
+#import "KKViewController.h"
+
+#endif
+
+#define     BASE_URL                    @"https://www.crowdact.com/beta4"
+#define     UPLOAD_URL                  @"http://instaonline.net/applications/uploadapi.php"
+//#define     BASE_URL                    @"https://www.crowdact.com"
+
+#define     DOC_FOLDER_PATH             [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask, YES)objectAtIndex:0]
+#define     APP_THEME_COLOR             [UIColor colorWithRed:13.0/255 green:33.0/255 blue:54.0/255 alpha:1.0]
+
+#define     APP_THEME_COLOR_TOP         [UIColor colorWithRed:15.0/255 green:41.0/255 blue:66.0/255 alpha:1.0]
+#define     APP_THEME_COLOR_BELLOW      [UIColor colorWithRed:20.0/255 green:64.0/255 blue:100.0/255 alpha:1.0]
+
+#define     TABLE_HEADER_COLOR          [UIColor colorWithRed:25.0/255 green:99.0/255 blue:139.0/255 alpha:1.0]
+
+#define     BLUE_RADIUM_COLOR           [UIColor colorWithRed:80.0/255 green:187.0/255 blue:1.0 alpha:1.0]
+#define     RED_RADIUM_COLOR            [UIColor colorWithRed:180.0/255 green:40.0/255 blue:20.0/255 alpha:1.0]
+
+
+#define SendDetectCommand      @"FF FF 37 00 06 00 00 00 00 A8 55 CC"
+#define SendNullCommand        @"FF FF 37 01 03 00 A8 55 C8"
+
+#endif
