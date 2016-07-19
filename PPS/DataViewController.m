@@ -150,7 +150,7 @@
             [_fakeView addSubview:self.lineChartView];
             [self.lineChartView setBackgroundColor:[UIColor clearColor]];
             
-            [self.lineChartView initialViewSetUp];
+//            [self.lineChartView initialViewSetUp];
         }];
     }];
     
