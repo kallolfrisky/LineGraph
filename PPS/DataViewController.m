@@ -18,11 +18,17 @@
 #define CABLE_NOT_CONNECTED_TEXT @"Not Connected";
 #define CABLE_REQUIRES_PASSCODE_TEXT @"Passcode Required"
 
+#define MAX_VERTICS 250
+
 #define     ILQueue                 dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0) //1
 
 @interface DataViewController (){
 
     NSArray *recJobUnits;
+    NSOperationQueue *queue;
+    NSMutableArray *dataSource;
+    
+    UIDeviceOrientation LAST_ORIENTATION;
 }
 
 @property (nonatomic, retain) IBOutlet UIView *fakeView;
@@ -41,8 +47,10 @@
     [[NSUserDefaults standardUserDefaults] setObject:nil forKey:@"MyJobName"];
     [[NSUserDefaults standardUserDefaults] synchronize];
     
-    [_searchView makeBorderCornerRadius:_searchView.frame.size.height/2 withColor:[UIColor colorWithWhite:0.0 alpha:0.4]];
+    queue = [[NSOperationQueue alloc] init];
+    dataSource = [NSMutableArray array];
     
+    [_searchView makeBorderCornerRadius:_searchView.frame.size.height/2 withColor:[UIColor colorWithWhite:0.0 alpha:0.4]];
     [_searchView setBackgroundColor:[UIColor colorWithWhite:0.0 alpha:0.3]];
     
     [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
@@ -58,6 +66,13 @@
     [self drawDataInGraph];
 }
 
+- (void)viewDidDisappear:(BOOL)animated{
+
+    [super viewDidDisappear:animated];
+    [queue cancelAllOperations];
+    [dataSource removeAllObjects];
+}
+
 - (void)drawDataInGraph
 {
     if (!_jobFileName) return;
@@ -69,60 +84,79 @@
     
     [self.view bringSubviewToFront:_searchView];
     
-    //************* Test: Create Data Source *************
-    NSMutableArray *dataSource = [NSMutableArray array];
+    NSBlockOperation *operationBlock = [[NSBlockOperation alloc] init];
+    __weak NSBlockOperation *weakOp = operationBlock;
     
-    NSString *txtFilePath = [[NSBundle mainBundle] pathForResource:_jobFileName ofType:@"rec"];
-//    NSString *txtFilePath =  [DOC_FOLDER_PATH stringByAppendingPathComponent:_jobFileName];
-    NSString *jobString = [NSString stringWithContentsOfFile:txtFilePath encoding:NSUTF8StringEncoding error:nil];
-    
-    NSArray *sentences = [jobString componentsSeparatedByString:@"\n"];
-    [sentences enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+    [operationBlock addExecutionBlock:^{
         
-        NSString *sentence = [(NSString*)obj stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if ([weakOp isCancelled]) return ;
         
-        NSArray *chorses = [sentence componentsSeparatedByString:@":"];
-        if ([chorses count] == 2) {
+        //************* Test: Create Data Source *************
+        
+        if (dataSource.count == 0){
+        
+            NSString *txtFilePath = [[NSBundle mainBundle] pathForResource:_jobFileName ofType:@"rec"];
+            //    NSString *txtFilePath =  [DOC_FOLDER_PATH stringByAppendingPathComponent:_jobFileName];
+            NSString *jobString = [NSString stringWithContentsOfFile:txtFilePath encoding:NSUTF8StringEncoding error:nil];
             
-            if (idx == 3) {
-                recJobUnits = [chorses[1] componentsSeparatedByString:@","];
-            }
+            NSArray *sentences = [jobString componentsSeparatedByString:@"\n"];
+            int sampling = (sentences.count > MAX_VERTICS)?(int)(sentences.count / MAX_VERTICS):1;
             
-        }else{
-            
-            chorses = [sentence componentsSeparatedByString:@"        "];
-            if ([chorses count] == 3) {
+            [sentences enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
                 
-                RLLineChartItem *item = [[RLLineChartItem alloc] init];
+                NSString *sentence = [(NSString*)obj stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 
-                NSString *time = [chorses[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                NSString *pressure = [chorses[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                NSString *temperature = [chorses[2] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                
-                item.xValue = [time doubleValue] ;
-                item.y1Value = ([pressure doubleValue]) ;
-                item.y2Value = ([temperature doubleValue]) ;
-                
-                [dataSource addObject:item];
-            }
+                NSArray *chorses = [sentence componentsSeparatedByString:@":"];
+                if ([chorses count] == 2) {
+                    
+                    if (idx == 3) {
+                        recJobUnits = [chorses[1] componentsSeparatedByString:@","];
+                    }
+                    
+                }else{
+                    
+                    if (idx%sampling == 0){
+                    
+                        chorses = [sentence componentsSeparatedByString:@"        "];
+                        if ([chorses count] == 3) {
+                            
+                            RLLineChartItem *item = [[RLLineChartItem alloc] init];
+                            
+                            NSString *time = [chorses[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                            NSString *pressure = [chorses[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                            NSString *temperature = [chorses[2] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                            
+                            item.xValue = [time doubleValue] ;
+                            item.y1Value = ([pressure doubleValue]) ;
+                            item.y2Value = ([temperature doubleValue]) ;
+                            
+                            [dataSource addObject:item];
+                        }
+                    }
+                }
+            }];
         }
+        
+        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+            ////////////// Create Line Char //////////////////////////
+            CGRect rect = CGRectMake(0, 0,
+                                     _fakeView.frame.size.width,
+                                     _fakeView.frame.size.height - 17);
+            
+            NSString *pressureTitle = [NSString stringWithFormat:@"PRESSURE (%@)",(![@"(null)" isEqualToString:recJobUnits[1]])?recJobUnits[1]:@"kPaa"];
+            NSString *temperatureTitle = [NSString stringWithFormat:@"TEMPERATURE (%@)",(![@"(null)" isEqualToString:recJobUnits[2]])?recJobUnits[2]:@"degC"];
+            
+            self.lineChartView = [[ARLineChartView alloc] initWithFrame:rect dataSource:dataSource xTitle:@"TIME (hours)" y1Title:pressureTitle y2Title:temperatureTitle desc1:@"Pressure" desc2:@"Temperature"];
+            [_fakeView addSubview:self.lineChartView];
+            [self.lineChartView setBackgroundColor:[UIColor clearColor]];
+            
+            [self.lineChartView initialViewSetUp];
+        }];
     }];
     
+    [queue addOperation:operationBlock];
+    
     //************ End Test *********************
-    
-    ////////////// Create Line Char //////////////////////////
-    CGRect rect = CGRectMake(0, 0,
-                             _fakeView.frame.size.width,
-                             _fakeView.frame.size.height - 17);
-    
-    NSString *pressureTitle = [NSString stringWithFormat:@"PRESSURE (%@)",(![@"(null)" isEqualToString:recJobUnits[1]])?recJobUnits[1]:@"kPaa"];
-    NSString *temperatureTitle = [NSString stringWithFormat:@"TEMPERATURE (%@)",(![@"(null)" isEqualToString:recJobUnits[2]])?recJobUnits[2]:@"degC"];
-    
-    self.lineChartView = [[ARLineChartView alloc] initWithFrame:rect dataSource:dataSource xTitle:@"TIME (hours)" y1Title:pressureTitle y2Title:temperatureTitle desc1:@"Pressure" desc2:@"Temperature"];
-    [_fakeView addSubview:self.lineChartView];
-    [self.lineChartView setBackgroundColor:[UIColor clearColor]];
-    
-    [self.lineChartView initialViewSetUp];
 }
 
 - (IBAction)zoomUpAction:(id)sender
@@ -157,14 +191,16 @@
 - (void) orientationChanged:(NSNotification *)note
 {
     [super orientationChanged:note];
-
     UIDevice * device = note.object;
+    if (LAST_ORIENTATION == device.orientation) return;
+    
     if (
         (device.orientation == UIDeviceOrientationPortrait) ||
         (device.orientation == UIDeviceOrientationLandscapeLeft) ||
         (device.orientation == UIDeviceOrientationLandscapeRight)
         ) {
             [self drawDataInGraph];
+            LAST_ORIENTATION = device.orientation;
         }
 }
 

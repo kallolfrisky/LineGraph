@@ -18,6 +18,8 @@ NSString *kColumnCell = @"ColumnCellID";
     
     NSMutableArray *dataSource;
     NSTimeInterval timeStamp;
+    
+    NSOperationQueue *queue;
 }
 
 @end
@@ -33,6 +35,8 @@ NSString *kColumnCell = @"ColumnCellID";
      addObserver:self selector:@selector(orientationChanged:)
      name:UIDeviceOrientationDidChangeNotification
      object:[UIDevice currentDevice]];
+    
+    queue = [[NSOperationQueue alloc] init];
     
     dataSource = [NSMutableArray array];
     tableHeaders = @[@"Index", @"Calendar\nTime", @"Time\n(hrs)", @"Press.\n(psia)", @"Temp.\n(DegC)"];
@@ -53,54 +57,67 @@ NSString *kColumnCell = @"ColumnCellID";
 }
 
 - (void)getJobData{
-
-    NSString *txtFilePath = [[NSBundle mainBundle] pathForResource:_jobFileName ofType:@"rec"];
-    NSString *jobString = [NSString stringWithContentsOfFile:txtFilePath encoding:NSUTF8StringEncoding error:nil];
     
-    NSArray *sentences = [jobString componentsSeparatedByString:@"\n"];
-    [sentences enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+    NSBlockOperation *operationBlock = [[NSBlockOperation alloc] init];
+    __weak NSBlockOperation *weakOp = operationBlock;
+    
+    [operationBlock addExecutionBlock:^{
         
-        NSString *sentence = [(NSString*)obj stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if ([weakOp isCancelled]) return ;
         
-        NSArray *chorses = [sentence componentsSeparatedByString:@":"];
-        if ([chorses count] == 2) {
+        NSString *txtFilePath = [[NSBundle mainBundle] pathForResource:_jobFileName ofType:@"rec"];
+        NSString *jobString = [NSString stringWithContentsOfFile:txtFilePath encoding:NSUTF8StringEncoding error:nil];
+        
+        NSArray *sentences = [jobString componentsSeparatedByString:@"\n"];
+        [sentences enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
             
-            if (idx == 0) {
-                timeStamp = [[DataModel sharedInstance] convertDelphiTimeStampToiOSTimeStamp:chorses[1]];
-                NSLog(@"timeStamp: %f",timeStamp);
+            NSString *sentence = [(NSString*)obj stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            
+            NSArray *chorses = [sentence componentsSeparatedByString:@":"];
+            if ([chorses count] == 2) {
+                
+                if (idx == 0) {
+                    timeStamp = [[DataModel sharedInstance] convertDelphiTimeStampToiOSTimeStamp:chorses[1]];
+                    NSLog(@"timeStamp: %f",timeStamp);
+                }
+                
+                if (idx == 3) {
+                    
+                    NSString *pressureTitle = [NSString stringWithFormat:@"Press.\n(%@)",(![@"(null)" isEqualToString:_recJobUnits[1]])?_recJobUnits[1]:@"kPaa"];
+                    NSString *temperatureTitle = [NSString stringWithFormat:@"Temp.\n(%@)",(![@"(null)" isEqualToString:_recJobUnits[2]])?_recJobUnits[2]:@"degC"];
+                    
+                    tableHeaders = @[@"Index", @"Calendar\nTime", @"Time\n(hrs)", pressureTitle,temperatureTitle];
+                }
+                
+            }else{
+                
+                chorses = [sentence componentsSeparatedByString:@"        "];
+                if ([chorses count] == 3) {
+                    
+                    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+                    [dateFormatter setDateFormat:@"yyyy/MM/dd HH:mm:ss"];
+                    //                [dateFormatter setTimeZone:[NSTimeZone systemTimeZone]];
+                    
+                    NSString *calenderTime = (timeStamp==0)?@"":[dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:timeStamp ++]];
+                    
+                    NSString *time = [chorses[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    NSString *pressure = [chorses[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    NSString *temperature = [chorses[2] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    
+                    NSArray *itemArray = @[[NSString stringWithFormat:@"%lu",(unsigned long)dataSource.count + 1],calenderTime,time,pressure,temperature];
+                    
+                    [dataSource addObject:itemArray];
+                }
             }
+        }];
+        
+        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
             
-            if (idx == 3) {
-                
-                NSString *pressureTitle = [NSString stringWithFormat:@"Press.\n(%@)",(![@"(null)" isEqualToString:_recJobUnits[1]])?_recJobUnits[1]:@"kPaa"];
-                NSString *temperatureTitle = [NSString stringWithFormat:@"Temp.\n(%@)",(![@"(null)" isEqualToString:_recJobUnits[2]])?_recJobUnits[2]:@"degC"];
-                
-                tableHeaders = @[@"Index", @"Calendar\nTime", @"Time\n(hrs)", pressureTitle,temperatureTitle];
-            }
-            
-        }else{
-            
-            chorses = [sentence componentsSeparatedByString:@"        "];
-            if ([chorses count] == 3) {
-                
-                NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-                [dateFormatter setDateFormat:@"yyyy/MM/dd HH:mm:ss"];
-//                [dateFormatter setTimeZone:[NSTimeZone systemTimeZone]];
-                
-                NSString *calenderTime = (timeStamp==0)?@"":[dateFormatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:timeStamp ++]];
-                
-                NSString *time = [chorses[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                NSString *pressure = [chorses[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                NSString *temperature = [chorses[2] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                
-                NSArray *itemArray = @[[NSString stringWithFormat:@"%lu",(unsigned long)dataSource.count + 1],calenderTime,time,pressure,temperature];
-                
-                [dataSource addObject:itemArray];
-            }
-        }
+            [myCollectionView reloadData];
+        }];
     }];
     
-    [myCollectionView reloadData];
+    [queue addOperation:operationBlock]; 
 }
 
 //********************************************** Collectionview operations **********************************************
